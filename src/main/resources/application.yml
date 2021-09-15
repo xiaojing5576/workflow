@@ -1,0 +1,47 @@
+server:
+  port: 10021
+  servlet:
+    context-path: /api/workflow
+
+spring:
+  datasource:
+    driver-class-name: oracle.jdbc.driver.OracleDriver
+    type: com.alibaba.druid.pool.DruidDataSource
+    druid:
+      url: jdbc:oracle:thin:@172.31.231.113:1521:ORCL
+      username: finance_maint
+      password: weixianwu123
+
+mybatis-plus:
+  mapper-locations: classpath:com/jing/workflow/dao/**.xml
+  global-config:
+    field-strategy: 2
+    db-column-underline: true
+    refresh-mapper: true
+    logic-delete-value: -1
+    logic-not-delete-value: 0
+    #主键类型  0:"数据库ID自增", 1:"用户输入ID",2:"全局唯一ID (数字类型唯一ID)", 3:"全局唯一ID UUID,"该类型为未设置主键类型,5, "字符串全局唯一ID"";
+    id-type: 2
+  configuration:
+    map-underscore-to-camel-case: true
+    cache-enabled: false
+    call-setters-on-nulls: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+camunda:
+  bpm:
+    admin-user:
+      id: huangjingyan #登录账号
+      password: 123456 #登录密码
+      firstName: huang
+    filter:
+      create: All tasks
+    #兼容oracle 12c以下版本
+    database:
+      jdbc-batch-processing: false
+
+#组织架构模块交互
+#基于发起人查询组织架构角色
+getStaffCodesByCompanyIdAndRoleId: http://172.31.225.34:99/api/user/organization/getStaffCodesByCompanyIdAndRoleIds?companyId={1}
+#查询组织架构特定角色
+getStaffCodesByDepartmentRoleIds: http://172.31.225.34:99/api/user/organization/getStaffCodesByDepartmentRoleIds
+isStaffUnderNodeByStaffCode: http://172.31.225.34:99/api/user/organization/isStaffUnderNodeByStaffCode
