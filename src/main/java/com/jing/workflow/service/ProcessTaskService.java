@@ -18,6 +18,7 @@ import org.camunda.bpm.engine.history.HistoricTaskInstance;
 import org.camunda.bpm.engine.repository.ProcessDefinition;
 import org.camunda.bpm.engine.rest.dto.task.TaskDto;
 import org.camunda.bpm.engine.runtime.ActivityInstance;
+import org.camunda.bpm.engine.runtime.Execution;
 import org.camunda.bpm.engine.runtime.ProcessInstance;
 import org.camunda.bpm.engine.task.Task;
 import org.springframework.stereotype.Service;
@@ -25,6 +26,7 @@ import org.springframework.stereotype.Service;
 import javax.annotation.Resource;
 import java.sql.Timestamp;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -145,6 +147,7 @@ public class ProcessTaskService {
 
     public String completeTask(TaskCompleteModel model){
         Task task = taskService.createTaskQuery().taskId(model.getTaskId()).singleResult();
+        //此处不应该重复设值，没必要（覆盖）：这时查出来的参数包含有内置参数nrOfInstances等，不能将其赋给其他任务，否则会将其他任务的内置参数修改，导致流程异常
         Map<String,Object> params = taskService.getVariables(task.getId());
         String processInstanceId = task.getProcessInstanceId();
         //添加批注
@@ -153,7 +156,9 @@ public class ProcessTaskService {
         }
         //审批通过
         if(model.getOpinion()){
-            taskService.complete(model.getTaskId(),params);
+            //此处不应该重复设值，没必要（覆盖）：当且仅当有全局参数发生变化，才将参数设置进去
+//            taskService.complete(model.getTaskId(),params);
+            taskService.complete(model.getTaskId());
             WorkflowTaskHistory currentTask = taskHistoryService.getOne(new QueryWrapper<WorkflowTaskHistory>()
                             .eq("PROCESS_INSTANCE_ID",processInstanceId)
                             .eq("TASK_ID",task.getId())
@@ -290,13 +295,29 @@ public class ProcessTaskService {
             runtimeService.createProcessInstanceModification(task.getProcessDefinitionId())
                     .startBeforeActivity(task.getTaskDefinitionKey())
                     .setVariable("assignee",x)
+                    //不生效：比如节点判断条件处引入某参数协助判断，在此处设置是不生效的，设置全局setVariable，会改变全局对应参数的值
+                      // .setVariableLocal("some","executionNeed")
                     .setVariable(workflowOperatorConf.getOperatorParamKey(),x)
                     .execute();
+            //修复任务节点设置local Variable不生效的问题：辨别execution和task的区别
+            List<Execution> executions = runtimeService.createExecutionQuery()
+                    .processInstanceId(instance.getProcessInstanceId())
+                    .activityId(task.getTaskDefinitionKey())
+                    .list();
+            Map<String,Object> somethingExecutionNeed = new HashMap<>();
+            somethingExecutionNeed.put("some","executionNeed");
+            executions.forEach(execution->{
+                //在这里设置当前节点的local参数才会对关联的任务生效
+                runtimeService.setVariablesLocal(execution.getId(),somethingExecutionNeed);
+            });
+
             //3.添加执行记录表
             Task userTask = taskService.createTaskQuery().taskAssignee(x)
                     .processInstanceId(instance.getProcessInstanceId())
                     .taskDefinitionKey(task.getTaskDefinitionKey())
                     .singleResult();
+            //不生效
+//            taskService.setVariableLocal(userTask.getId(),"some","executionNeed");
             WorkflowTaskHistory nextTask = new WorkflowTaskHistory();
             nextTask.setId(SnowFlakeUtil.nextId());
             nextTask.setProcessDefinitionId(instance.getProcessDefinitionId());
